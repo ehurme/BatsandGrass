@@ -1,12 +1,10 @@
-# Vesper file check
+# Audiomoth file check
 library(pacman)
 p_load(seewave, tuneR, foreach, doParallel)
 
-hd <- "D:/"
+hd <- "D:/batsandgrass/2020/"
 folders <- c("rawdata_batandinsectscreening",
-            "scent-experiment")
-
-n.cores <- parallel::detectCores() - 1
+             "scent-experiment")
 
 k = 1
 for(k in 1:length(folders)){
@@ -15,31 +13,47 @@ for(k in 1:length(folders)){
   wd <- paste0(hd, folder, "/")
   try(files <- list.files(wd, pattern = ".WAV", full.names = TRUE, recursive = TRUE, ignore.case = TRUE))
 
-  which(files == "F:/rawdata_batandinsectscreening//Hockgraben/nach_Maht/Audiomoth/23.08_Tag1/Mitte/20200823-HGm_203900.WAV")
+  # which(files == "F:/rawdata_batandinsectscreening//Hockgraben/nach_Maht/Audiomoth/23.08_Tag1/Mitte/20200823-HGm_203900.WAV")
 
-  files[2379]
-  j = 2379
-  for(j in 2379:length(files)){
-    b <- {}
+  # files[2379]
+  j = 1
+  for(j in 1:length(files)){
+    try({
+      # create empty variable for bat call
+      b <- {}
 
-    # if(any(files[j] == buzz_files)){
-    b <- readWave(files[j]) # , ".wav"))
-    b <- ffilter(b, from = 3000, to = 90000, bandpass = TRUE, output = "Wave")
+      # import audio file
+      b <- tuneR::readWave(files[j]) # , ".wav"))
+      # filter out low and high freq noise
+      b <- seewave::ffilter(b, from = 3000, to = 90000, bandpass = TRUE, output = "Wave")
 
-    elements <- strsplit(files[j], "/")
+      # break up file path into each folder element
+      elements <- strsplit(files[j], "/")
 
-    output <- paste0(paste(c("D:", unlist(elements)[2:(length(unlist(elements))-1)], "Spectro",
-                    unlist(elements)[length(unlist(elements))]), collapse="/"),".jpg")
+      # create path to new file
+      output <- paste0(paste(c(hd, unlist(elements)[4:(length(unlist(elements))-1)], "Spectro",
+                               unlist(elements)[length(unlist(elements))]), collapse="/"),".jpg")
 
-    if(!dir.exists(paste(c("D:", unlist(elements)[2:(length(unlist(elements))-1)], "Spectro"),
-                        collapse = "/"))){
-      dir.create(paste(c("D:", unlist(elements)[2:(length(unlist(elements))-1)], "Spectro"),
-                       collapse = "/"), )
-    }
-    jpeg(filename = output, width = 1000, height = 600, )
-      plot(b, main = unlist(elements)[length(unlist(elements))])
-    dev.off()
-    #
+      # create folder for spectrograms
+      if(!dir.exists(paste(c(hd, unlist(elements)[4:(length(unlist(elements))-1)], "Spectro"),
+                           collapse = "/"))){ # check if folder already exists
+        dir.create(paste(c(hd, unlist(elements)[4:(length(unlist(elements))-1)], "Spectro"),
+                         collapse = "/"), ) # if not create folder
+      }
+
+      # plot full amplitude spectrogram of the file
+      if(!file.exists(output)){ # check if the file already exists
+        jpeg(filename = output, width = 1000, height = 600, )
+        plot(b, main = unlist(elements)[length(unlist(elements))])
+        dev.off()
+        print(output)
+      }
+    })
+  }
+}
+
+
+################
     d <- duration(b)
     fs <- b@samp.rate
     count <- 0
