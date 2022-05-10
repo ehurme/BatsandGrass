@@ -19,7 +19,7 @@ df$folder_name_org %>% unique
 df$grassheight <- as.numeric(gsub(",", ".", gsub("\\.", "", df$grassheight)))
 
 ## add date and time
-df$time <- df$creation_date %>% ymd_hms
+df$time <- df$creation_date %>% ymd_hms(tz = "CET")
 # df$date <- date(df$time)
 df$year <- year(df$time)
 
@@ -31,24 +31,25 @@ df$site <- sapply(strsplit(df$folder_name_org, "-"), "[", 2)
 df$date <- sapply(strsplit(df$folder_name_org, "-"), "[", 1) %>% ymd
 ## get sunset times
 dates <- unique(df$date)
-sunset <- suncalc::getSunlightTimes(date = dates, lat = 47.6904, lon = 9.1869, tz = "CET")
+dates <- dates[order(dates)]
+sunset <- suncalc::getSunlightTimes(date = seq.Date(dates[1], dates[length(dates)], by = 1), lat = 47.6904, lon = 9.1869, tz = "CET")
 df$sunset %>% unique
 df$sunset2 <- {}
 df$sunset2 <- ymd_hms("2000-01-01 12:00:00", tz = "CET")
 
-i = 1
-for(i in 1:length(dates)){
-  sidx <- which(sunset$date == dates[i])
-  idx <- which(df$date == dates[i])
-  df[idx,]
-  sunset[sidx,]
-  df$sunset2[idx] <- sunset$sunset[sidx] + 2*3600
+i = 17068
+for(i in 1:nrow(df)){
+
+  idx <- which.min(abs(df$time[i] - sunset$sunset))
+
+  df$sunset2[i] <- sunset$sunset[idx]
 }
 
 df$min_since_sunset <- as.numeric(df$time - df$sunset2)
 range(df$min_since_sunset)/3600
 df[abs(df$min_since_sunset) > 50000,]
-hist(abs(df$min_since_sunset), breaks = 1000)
+which(abs(df$min_since_sunset) > 50000)
+hist((df$min_since_sunset), breaks = 1000)
 
 plot(df$time[1:100], df$min_since_sunset[1:100])
 
@@ -81,14 +82,14 @@ df$min_since_sunset %>% length
 summary(df)
 
 g1 <- gam(found_insects~
-            # s(date)
+            s(as.numeric(date))+
             s(as.numeric(min_since_sunset))+
             s(temperature)+
-            s(wind)+
-            site,
+            s(wind),
+            #site,
           data = df,
           family = negbin(theta = 0.62),
-          method = "REML", scale = 0)
+          method = "REML")
 summary(g1)
 plot(g1)
 
