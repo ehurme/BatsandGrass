@@ -22,7 +22,7 @@ for(l in 1:length(years)){
       print(paste("wav files:", length(list.files(path = dirs[i], pattern = ".wav", ignore.case = TRUE))))
       if(length(list.files(path = dirs[i], pattern = ".wav", ignore.case = TRUE)) > 0){
         print(paste("spectro files:", length(list.files(path = dirs[i], pattern = ".jpeg", ignore.case = TRUE))))
-        if(length(list.files(path = dirs[i], pattern = ".jpeg", ignore.case = TRUE)) <=
+        if(length(list.files(path = dirs[i], pattern = ".jpeg", ignore.case = TRUE))*5 <=
            length(list.files(path = dirs[i], pattern = ".wav", ignore.case = TRUE))){
           try(full_spectrograms(sxrow = 0.5, rows = 10,
                                 pal = seewave::reverse.gray.colors.2, wl = 1024,
