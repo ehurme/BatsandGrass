@@ -28,7 +28,7 @@ df20$site <- substr(df20$id, 1, nchar(df20$id)-1)
 
 df20$timeID <- sapply(strsplit(df20$uniqueID, "-"), "[", 3)
 df20$timeh <- round_date(df20$time, unit = "1 minute")
-tmp <- df20 %>% group_by(ID, site, timeh, grassheight) %>%
+tmp <- df20 %>% group_by(site, timeh, grassheight) %>%
   summarise(mean_insect = mean(insects), platforms = n())
 
 ### 2021
@@ -56,18 +56,16 @@ df21 <- df21 %>% mutate(.,
                 .keep = "none") %>%
   filter(treatment=="pre" | treatment=="post" | treatment == "mowing")
 
-df21$id <- sapply(strsplit(df21$ID, "-"), "[", 2)
+df21$id <- sapply(strsplit(df21$ID, "_"), "[", 2)
 df21$site <- substr(df21$id, 1, nchar(df21$id)-1)
 
 df21$timeh <- round_date(df21$time, unit = "1 minute")
-tmp2 <- df21 %>% group_by(ID, site, timeh, grassheight) %>%
+tmp2 <- df21 %>% group_by(site, timeh, grassheight) %>%
   summarise(mean_insect = mean(insects), platforms = n())
 
 df <- full_join(tmp, tmp2)
 df <- df %>% mutate(., time = timeh)
 df$year <- year(df$timeh)
-
-
 
 ## how many pictures have insects?
 hist(df$mean_insect, breaks = 1000, xlim = c(0,10))
@@ -92,7 +90,7 @@ for(i in 1:nrow(df)){
 }
 
 df$min_since_sunset <- as.numeric(df$time - (df$sunset+2*3600))/60
-range(df$min_since_sunset)/3600
+range(df$min_since_sunset)/60
 df[abs(df$min_since_sunset) > 50000,]
 which(abs(df$min_since_sunset) > 50000)
 hist((df$min_since_sunset), breaks = 1000)
@@ -113,31 +111,44 @@ wind$time <- ymd_h(wind$MESS_DATUM, tz = "CET")
 
 # plot(temp$time, temp$TT_TU)
 plot(wind$time, wind$F)
+df$temperature <- NA
+df$wind <- NA
 
 for(i in 1:nrow(df)){
-  tidx <- which.min(abs(temp$time - df$time[i]))
-  widx <- which.min(abs(wind$time - df$time[i]))
-
+  tidx <- which.min(abs(temp$time - (df$time[i]-2*3600)))
+  widx <- which.min(abs(wind$time - (df$time[i]-2*3600)))
+  # df$time[i]
+  # temp[tidx,]
+  # wind[widx,]
   df$temperature[i] <- temp$TT_TU[tidx]
   df$wind[i] <- wind$F[widx]
 }
 
-df$found_insects %>% length
-df$date %>% length
-df$min_since_sunset %>% length
+df$yday <- yday(df$time)
 summary(df)
+table(df$site)
+table(df$platforms)
 
-g1 <- gam(found_insects~
-            s(as.numeric(date))+
-            s(as.numeric(min_since_sunset))+
-            s(temperature)+
-            s(wind),
-            #site,
-          data = df,
+
+g1 <- gam(mean_insect~
+            s(as.numeric(yday), k = 5)+
+            s(as.numeric(min_since_sunset), k = 5)+
+            s(grassheight, k = 5)+
+            s(temperature, k = 5)+
+            s(wind, k = 5)+
+            as.factor(year)+site,
+          data = df[df$site != "GS",],
           family = negbin(theta = 0.62),
           method = "REML")
 summary(g1)
 plot(g1)
 
+p_load("corrplot")
+corrplot(cor(df[,c("yday", "temperature", "wind", "min_since_sunset")]), method = "number")
 
+ggplot(df, aes(min_since_sunset, temperature, col = site))+geom_point()+facet_wrap(~date(time))
+ggplot(df, aes(min_since_sunset, wind, col = site))+geom_point()+facet_wrap(~date(time))
 
+## something is wrong here. There shouldn't be multiple lines or levels per date since temp and wind are at a fixed location
+
+df$site %>% unique()
