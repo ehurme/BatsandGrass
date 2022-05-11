@@ -23,10 +23,12 @@ df20 <- df20 %>% mutate(.,
                 .keep = "none") %>%
   filter(treatment=="pre" | treatment=="post" | treatment == "mowing")
 df20$treatment %>% unique
+df20$id <- sapply(strsplit(df20$ID, "-"), "[", 2)
+df20$site <- substr(df20$id, 1, nchar(df20$id)-1)
 
 df20$timeID <- sapply(strsplit(df20$uniqueID, "-"), "[", 3)
 df20$timeh <- round_date(df20$time, unit = "1 minute")
-tmp <- df20 %>% group_by(ID, meadow, timeh, grassheight) %>%
+tmp <- df20 %>% group_by(ID, site, timeh, grassheight) %>%
   summarise(mean_insect = mean(insects), platforms = n())
 
 ### 2021
@@ -58,7 +60,7 @@ df21$id <- sapply(strsplit(df21$ID, "-"), "[", 2)
 df21$site <- substr(df21$id, 1, nchar(df21$id)-1)
 
 df21$timeh <- round_date(df21$time, unit = "1 minute")
-tmp2 <- df21 %>% group_by(ID, meadow, timeh, grassheight) %>%
+tmp2 <- df21 %>% group_by(ID, site, timeh, grassheight) %>%
   summarise(mean_insect = mean(insects), platforms = n())
 
 df <- full_join(tmp, tmp2)
@@ -75,28 +77,21 @@ sum(df$mean_insect == 0)/nrow(df) # 55% of minutes monitored are empty
 sum(df$mean_insect >= 10)/nrow(df) # 2.1% of minutes contain swarms
 
 
-
-
-# save site name
-df$site <- sapply(strsplit(df$folder_name_org, "-"), "[", 2)
-df$date <- sapply(strsplit(df$folder_name_org, "-"), "[", 1) %>% ymd
 ## get sunset times
-dates <- unique(df$date)
+dates <- unique(date(df$time))
 dates <- dates[order(dates)]
 sunset <- suncalc::getSunlightTimes(date = seq.Date(dates[1], dates[length(dates)], by = 1), lat = 47.6904, lon = 9.1869, tz = "CET")
-df$sunset %>% unique
-df$sunset2 <- {}
-df$sunset2 <- ymd_hms("2000-01-01 12:00:00", tz = "CET")
+df$sunset <- ymd_hms("2000-01-01 12:00:00", tz = "CET")
 
 i = 17068
 for(i in 1:nrow(df)){
 
   idx <- which.min(abs(df$time[i] - sunset$sunset))
 
-  df$sunset2[i] <- sunset$sunset[idx]
+  df$sunset[i] <- sunset$sunset[idx]
 }
 
-df$min_since_sunset <- as.numeric(df$time - df$sunset2)
+df$min_since_sunset <- as.numeric(df$time - (df$sunset+2*3600))/60
 range(df$min_since_sunset)/3600
 df[abs(df$min_since_sunset) > 50000,]
 which(abs(df$min_since_sunset) > 50000)
@@ -104,7 +99,7 @@ hist((df$min_since_sunset), breaks = 1000)
 
 plot(df$time[1:100], df$min_since_sunset[1:100])
 
-plot(df$date, df$found_insects)
+plot(df$time, df$mean_insect)
 
 
 ## add weather data
@@ -112,9 +107,9 @@ temp <- fread("../../../Dropbox/MPI/BatsandGrass/Data/produkt_tu_stunde_20070401
 wind <- fread("../../../Dropbox/MPI/BatsandGrass/Data/produkt_ff_stunde_20201001_20211231_15801.txt")
 
 temp$TT_TU[temp$TT_TU < -200] <- NA
-temp$time <- ymd_h(temp$MESS_DATUM)
+temp$time <- ymd_h(temp$MESS_DATUM, tz = "CET")
 
-wind$time <- ymd_h(wind$MESS_DATUM)
+wind$time <- ymd_h(wind$MESS_DATUM, tz = "CET")
 
 # plot(temp$time, temp$TT_TU)
 plot(wind$time, wind$F)
