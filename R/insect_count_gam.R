@@ -5,26 +5,77 @@ library(pacman)
 p_load(data.table, lubridate, tidyverse, ggplot2, mgcv, suncalc, janitor)
 
 ## load the data
-df <- fread("../../../Dropbox/MPI/BatsandGrass/Data/German_set_all_results95_v7MM.csv") %>% clean_names()
+### 2020
+
+df20 <- fread("../../../Dropbox/MPI/BatsandGrass/Data/bdf.final.csv")
+df20 <- df20 %>% mutate(.,
+                ID,
+                platform,
+                image_name = filename,
+                # date = ymd(date.x.x),
+                time = mtime,
+                meadow = meadow.x,
+                location,
+                grassheight,
+                insects = found_insects,
+                # bats = totalcount,
+                treatment = Treatment,
+                .keep = "none") %>%
+  filter(treatment=="pre" | treatment=="post" | treatment == "mowing")
+df20$treatment %>% unique
+
+df20$timeID <- sapply(strsplit(df20$uniqueID, "-"), "[", 3)
+df20$timeh <- round_date(df20$time, unit = "1 minute")
+tmp <- df20 %>% group_by(ID, meadow, timeh, grassheight) %>%
+  summarise(mean_insect = mean(insects), platforms = n())
+
+### 2021
+
+df21 <- fread("../../../Dropbox/MPI/BatsandGrass/Data/German_set_all_results95_v7MM.csv") %>% clean_names()
+### remove result column
+df21$result <- {}
+df21$grassheight <- as.numeric(gsub(",", ".", gsub("\\.", "", df21$grassheight)))
 ### remove rain
-df <- df[df$note_if_more_then_10_insects != "rain",]
+df21 <- df21[df21$note_if_more_then_10_insects != "rain",]
+
+df21 <- df21 %>% mutate(.,
+                ID = image_name,
+                # uniqueID,
+                platform = NA,
+                image_name = name_org,
+                # date = ymd(creation_date),
+                time = ymd_hms(creation_date),
+                meadow = NA,
+                location,
+                grassheight,
+                insects = found_insects,
+                # bats = totalcount,
+                treatment,
+                .keep = "none") %>%
+  filter(treatment=="pre" | treatment=="post" | treatment == "mowing")
+
+df21$id <- sapply(strsplit(df21$ID, "-"), "[", 2)
+df21$site <- substr(df21$id, 1, nchar(df21$id)-1)
+
+df21$timeh <- round_date(df21$time, unit = "1 minute")
+tmp2 <- df21 %>% group_by(ID, meadow, timeh, grassheight) %>%
+  summarise(mean_insect = mean(insects), platforms = n())
+
+df <- full_join(tmp, tmp2)
+df <- df %>% mutate(., time = timeh)
+df$year <- year(df$timeh)
+
+
 
 ## how many pictures have insects?
-hist(df$found_insects, breaks = 1000, xlim = c(0,100))
-sum(df$found_insects == 0)/nrow(df) # 75.9% of pictures are empty
-sum(df$found_insects >= 10)/nrow(df) # 2.6% contain swarms
+hist(df$mean_insect, breaks = 1000, xlim = c(0,10))
 
-# clean up dataframe
-df$folder_name_org %>% unique
-df$grassheight <- as.numeric(gsub(",", ".", gsub("\\.", "", df$grassheight)))
+sum(df$mean_insect == 0)/nrow(df) # 55% of minutes monitored are empty
 
-## add date and time
-df$time <- df$creation_date %>% ymd_hms(tz = "CET")
-# df$date <- date(df$time)
-df$year <- year(df$time)
+sum(df$mean_insect >= 10)/nrow(df) # 2.1% of minutes contain swarms
 
-# remove result column
-df$result <- {}
+
+
 
 # save site name
 df$site <- sapply(strsplit(df$folder_name_org, "-"), "[", 2)
