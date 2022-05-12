@@ -2,7 +2,8 @@
 
 ## load libraries
 library(pacman)
-p_load(data.table, lubridate, tidyverse, ggplot2, mgcv, suncalc, janitor)
+p_load(data.table, lubridate, tidyverse, ggplot2,
+       mgcv, suncalc, janitor, corrplot)
 
 ## load the data
 ### 2020
@@ -25,12 +26,13 @@ df20 <- df20 %>% mutate(.,
 df20$treatment %>% unique
 df20$id <- sapply(strsplit(df20$ID, "-"), "[", 2)
 df20$site <- substr(df20$id, 1, nchar(df20$id)-1)
+paste0(df20$site, ": ", df20$meadow) %>% unique
 
-df20$timeID <- sapply(strsplit(df20$uniqueID, "-"), "[", 3)
+# df20$timeID <- sapply(strsplit(df20$uniqueID, "-"), "[", 3)
 df20$timeh <- round_date(df20$time, unit = "1 minute")
 tmp <- df20 %>% group_by(site, timeh, grassheight) %>%
   summarise(mean_insect = mean(insects), platforms = n())
-
+summary(tmp)
 ### 2021
 
 df21 <- fread("../../../Dropbox/MPI/BatsandGrass/Data/German_set_all_results95_v7MM.csv") %>% clean_names()
@@ -69,6 +71,8 @@ df$year <- year(df$timeh)
 
 ## how many pictures have insects?
 hist(df$mean_insect, breaks = 1000, xlim = c(0,10))
+
+sum(df20$found_insects)
 
 sum(df$mean_insect == 0)/nrow(df) # 55% of minutes monitored are empty
 
@@ -143,7 +147,6 @@ g1 <- gam(mean_insect~
 summary(g1)
 plot(g1)
 
-p_load("corrplot")
 corrplot(cor(df[,c("yday", "temperature", "wind", "min_since_sunset")]), method = "number")
 
 ggplot(df, aes(min_since_sunset, temperature, col = site))+geom_point()+facet_wrap(~date(time))
