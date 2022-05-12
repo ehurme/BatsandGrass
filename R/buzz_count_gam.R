@@ -26,6 +26,14 @@ bdf_sum <- bdf %>% group_by(year, where, time) %>%
 # Sampling hours?
 ## get index of all relevant audio files
 
+### audio files were 55 sec long
+files <- list.files("D:/batsandgrass/", pattern = "*.wav", ignore.case = TRUE,
+                    full.names = FALSE, recursive = TRUE)
+folders <- list.dirs("D:/batsandgrass/", recursive = TRUE, full.names = TRUE)
+save(files, folders, file = "../../../Dropbox/MPI/BatsandGrass/Data/audio_files.robj")
 
+files_no_path <- setdiff(list.files("D:/batsandgrass/", pattern = "*.wav", ignore.case = TRUE,
+                   full.names = FALSE, recursive = TRUE),
+        list.dirs("D:/batsandgrass/", recursive = TRUE, full.names = FALSE))
 
 
