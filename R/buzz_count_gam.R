@@ -18,7 +18,14 @@ bdf %>% summary
 
 ## summarize per sampling minute?
 
+
+bdf_sum <- bdf %>% group_by(year, where, time) %>%
+  summarise(total_buzzes = sum(!is.na(buzzfile_na_means_no_buzz)))
+
+
 # Sampling hours?
+## get index of all relevant audio files
+
 
 
 
