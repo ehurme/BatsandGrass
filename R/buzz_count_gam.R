@@ -105,6 +105,7 @@ for(i in 1:nrow(bdf)){
 }
 
 sum(df$buzz)
+df$buzz %>% table
 # why is the total so low?
 
 
