@@ -13,13 +13,10 @@ bdf$loc <- sapply(strsplit(loc_hours, "_"), "[", 1)
 hours <- sapply(strsplit(loc_hours, "_"), "[", 2)
 
 bdf$timestamp <- ymd_hms(paste(dates, hours))
-bdf$time %>% mdy
-bdf %>% summary
 
 ## summarize per sampling minute?
 
-
-bdf_sum <- bdf %>% group_by(year, where, time) %>%
+bdf_sum <- bdf %>% group_by(year, where, time, loc) %>%
   summarise(total_buzzes = sum(!is.na(buzzfile_na_means_no_buzz)))
 
 
@@ -44,6 +41,20 @@ experiment %>% table
 
 files <- files[-which(experiment == "ScentExperiment2021")]
 
+
+location <- sapply(strsplit(files, "/"), "[", 6)
+location[nchar(location) == 10] <- sapply(strsplit(files[nchar(location)==10], "/"), "[", 7)
+location[nchar(location) == 5] <- sapply(strsplit(files[nchar(location)==5], "/"), "[", 7)
+location[nchar(location) == 22] <- sapply(strsplit(files[nchar(location)==22], "/"), "[", 6)
+location[location == "Audiomoth"] <- sapply(strsplit(files[location=="Audiomoth"], "/"), "[", 5)
+location[location == "10.08"] <- sapply(strsplit(files[location=="10.08"], "/"), "[", 6)
+
+location[location == "Edge" | location == "Rand"] <- "edge"
+location[location == "Middle" | location == "Mitte"] <- "middle"
+
+location %>% table
+
+
 filenames <- {}
 filenames <- sapply(strsplit(files, "/"), "[", 8)
 filenames[which(is.na(filenames))] <- sapply(strsplit(files[which(is.na(filenames))], "/"), "[", 7)
@@ -58,19 +69,19 @@ time <- substr(filenames, nchar(filenames)-9, nchar(filenames)-4)
 datetime <- ymd_hms(paste(date, time))
 filenames[datetime %>% is.na %>% which]
 
-loc <- sapply(strsplit(files, "/"), "[", 3)
-loc %>% unique
-loc[loc == "St.Katharina"] <- "StKatharina"
-loc[loc == "Hockgraben UnI"] <- "Hockgraben"
+meadow <- sapply(strsplit(files, "/"), "[", 3)
+meadow %>% unique
+meadow[meadow == "St.Katharina"] <- "StKatharina"
+meadow[meadow == "Hockgraben UnI"] <- "Hockgraben"
 
-loc %>% table
-which(is.na(loc))
+meadow %>% table
+which(is.na(meadow))
 
 year <- sapply(strsplit(files, "/"), "[", 1)
 year %>% unique
 
 
-paste0(year, date, loc) %>% table
+paste0(date, meadow, location) %>% table
 
 # parse filenames
 
@@ -80,18 +91,18 @@ files[is.na(floctime) %>% which]
 nchar(floctime) %>% table
 
 ftime <- sapply(strsplit(floctime, "_"), "[", 2)
-floc <- sapply(strsplit(floctime, "_"), "[", 1)
+loc <- sapply(strsplit(floctime, "_"), "[", 1)
 
 
 # put everything together in a data.table
-df <- data.table(year, site = loc, loc = floc, date, time, datetime)
+buzz_df <- data.table(year, meadow, loc, location, date, time, datetime)
 # # remove recordings after midnight?
 
-df <- df[which(df$time %>% as.numeric > 150000),]
+# df <- df[which(df$time %>% as.numeric > 150000),]
 
 # summarize data
 
-df %>% group_by(year, date, site) %>%
+buzz_df %>% group_by(year, date, meadow, location) %>%
   summarise(start = min(datetime),
             end = max(datetime))
 # get first and last times for each recording session
@@ -101,28 +112,30 @@ df %>% group_by(year, date, site) %>%
 
 bdf$where %>% unique
 bdf$where[bdf$where == "Hockgraben Uni"] <- "Uni"
+bdf$location <- "edge"
+bdf$location[bdf$camera == "Mitte"] <- "middle"
 
-df$buzz <- 0
-df$species <- NA
+buzz_df$buzz <- 0
+buzz_df$species <- NA
 
 i = 1
 for(i in 1:nrow(bdf)){
   idx <- {}
-  idx <- which(bdf$where[i] == df$site &
-                 bdf$timestamp[i] == df$datetime &
-                 bdf$loc[i] == df$loc)
-  if(length(idx) == 0){print(bdf[i,])}
-  df$buzz[idx] <- df$buzz[idx] + 1
-  df$species[idx] <- bdf$species[i]
+  idx <- which(bdf$where[i] == buzz_df$meadow &
+                 bdf$timestamp[i] == buzz_df$datetime &
+                 bdf$location[i] == buzz_df$location)
+  if(length(idx) > 0){
+    buzz_df$buzz[idx] <- df$buzz[idx] + 1
+    buzz_df$species[idx] <- bdf$species[i]
+  }
 }
 
-df$species %>% unique
-sum(df$buzz)
-df$buzz %>% table
+buzz_df$species %>% unique
+sum(buzz_df$buzz, na.rm = TRUE)
+buzz_df$buzz %>% table
 
-df$yday <- yday(df$datetime)
+buzz_df$yday <- yday(buzz_df$datetime)
 
-buzz_df <- df
 save(bdf, buzz_df, file = "../../../Dropbox/MPI/BatsandGrass/Data/buzz_count.robj")
 
 

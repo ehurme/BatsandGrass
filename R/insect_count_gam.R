@@ -25,12 +25,12 @@ df20 <- df20 %>% mutate(.,
   filter(treatment=="pre" | treatment=="post" | treatment == "mowing")
 df20$treatment %>% unique
 df20$id <- sapply(strsplit(df20$ID, "-"), "[", 2)
-df20$site <- substr(df20$id, 1, nchar(df20$id)-1)
-paste0(df20$site, ": ", df20$meadow) %>% unique
+df20$loc <- substr(df20$id, 1, nchar(df20$id)-1)
+paste0(df20$loc, ": ", df20$meadow) %>% unique
 
 # df20$timeID <- sapply(strsplit(df20$uniqueID, "-"), "[", 3)
-df20$timeh <- round_date(df20$time, unit = "1 minute")
-tmp <- df20 %>% group_by(site, timeh, grassheight) %>%
+df20$datetime <- round_date(df20$time, unit = "1 minute")
+tmp <- df20 %>% group_by(meadow, location, loc, datetime, grassheight) %>%
   summarise(mean_insect = mean(insects), platforms = n())
 summary(tmp)
 ### 2021
@@ -59,15 +59,30 @@ df21 <- df21 %>% mutate(.,
   filter(treatment=="pre" | treatment=="post" | treatment == "mowing")
 
 df21$id <- sapply(strsplit(df21$ID, "_"), "[", 2)
-df21$site <- substr(df21$id, 1, nchar(df21$id)-1)
+df21$loc <- substr(df21$id, 1, nchar(df21$id)-1)
 
-df21$timeh <- round_date(df21$time, unit = "1 minute")
-tmp2 <- df21 %>% group_by(site, timeh, grassheight) %>%
+df21$datetime <- round_date(df21$time, unit = "1 minute")
+tmp2 <- df21 %>% group_by(loc, location, datetime, grassheight) %>%
   summarise(mean_insect = mean(insects), platforms = n())
 
 df <- full_join(tmp, tmp2)
-df <- df %>% mutate(., time = timeh)
-df$year <- year(df$timeh)
+df[which(df$platforms> 1),]
+
+#df <- df %>% mutate(., time = datetime)
+df$year <- year(df$datetime)
+
+df$loc %>% unique()
+df$meadow[df$loc == "H"] <- "Hegne"
+df$meadow[df$loc == "HG"] <- "Hockgraben"
+df$meadow[df$loc == "I"] <- "Institute"
+df$meadow[df$loc == "S"] <- "Scheune"
+df$meadow[df$loc == "SK"] <- "St.Katharina"
+df$meadow[df$loc == "T"] <- "Tannenhof"
+df$meadow[df$loc == "U"] <- "Uni"
+df$meadow[df$loc == "UK"] <- "UniKurve"
+df$meadow[df$loc == "V"] <- "Voliere"
+df$meadow[df$loc == "W"] <- "Wollmatingen"
+df$meadow[df$loc == "M"] <- "Mill"
 
 ## how many pictures have insects?
 hist(df$mean_insect, breaks = 1000, xlim = c(0,10))
@@ -77,6 +92,44 @@ sum(df20$found_insects)
 sum(df$mean_insect == 0)/nrow(df) # 55% of minutes monitored are empty
 
 sum(df$mean_insect >= 10)/nrow(df) # 2.1% of minutes contain swarms
+
+#######################################################################
+## join buzz count
+
+load("../../../Dropbox/MPI/BatsandGrass/Data/buzz_count.robj")
+buzz_df$meadow <- buzz_df$site
+buzz_df$year <- as.numeric(buzz_df$year)
+
+# monitoring data
+m <- full_join(df, buzz_df[,-c("site", "loc", "date", "time", "yday")],
+               by = c("year", "datetime", "meadow"))
+
+which(!is.na(m$mean_insect) & !is.na(m$buzz))
+
+
+df$buzz <- NA
+i
+for(i in 1:nrow(buzz_df)){
+  idx <- which(buzz_df$year[i] == df$year &
+                 buzz_df$meadow[i] == df$meadow &
+                 buzz_df$datetime[i] == df$time)
+  if(length(idx)>0){
+    df$buzz[idx] <- buzz_df$buzz[i]
+  }
+}
+
+df$datetime <- df$time
+
+full_join(df[,c()])
+
+
+
+
+
+
+
+
+
 
 
 ## get sunset times
@@ -171,12 +224,15 @@ df[date(df$time) == "2020-08-13",]
 # ggplot(df, aes(min_since_sunset, temperature, col = site))+geom_point()+facet_wrap(~date(time))
 # ggplot(df, aes(min_since_sunset, wind, col = site))+geom_point()+facet_wrap(~date(time))
 
-df$site %>% unique()
-df$location <- NA
-df$location[df$site == "U"]
 
-## join buzz count
-load("../../../Dropbox/MPI/BatsandGrass/Data/buzz_count.robj")
 
-unique(paste(buzz_df$site, buzz_df$loc))
-df
+names(df)
+
+
+
+
+
+
+
+
+
