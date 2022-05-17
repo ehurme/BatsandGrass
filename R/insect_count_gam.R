@@ -131,6 +131,7 @@ for(i in 1:nrow(df)){
 df$yday <- yday(df$time)
 summary(df)
 table(df$site)
+
 table(df$platforms)
 
 
@@ -145,13 +146,37 @@ g1 <- gam(mean_insect~
           family = negbin(theta = 0.62),
           method = "REML")
 summary(g1)
-plot(g1)
+# plot(g1)
 
 corrplot(cor(df[,c("yday", "temperature", "wind", "min_since_sunset")]), method = "number")
 
-ggplot(df, aes(min_since_sunset, temperature, col = site))+geom_point()+facet_wrap(~date(time))
-ggplot(df, aes(min_since_sunset, wind, col = site))+geom_point()+facet_wrap(~date(time))
+save(df, g1, file = "insect_gam.robj")
+load("insect_gam.robj")
 
-## something is wrong here. There shouldn't be multiple lines or levels per date since temp and wind are at a fixed location
+dates <- unique(date(df$time))
+i = 1
+for(i in 1:length(dates)){
+  with(df[date(df$time) == dates[i],], plot(min_since_sunset, wind,
+                                            main = dates[i]))
+}
+
+with(df[date(df$time) == "2020-08-16",], plot(min_since_sunset, wind))
+
+# suspect dates
+df[date(df$time) == "2020-08-13",]
+
+# "2020-08-14", "2020-08-18",  - only two points
+# "2021-08-13", "2021-08-03", "2021-07-23", "2021-08-20", "2021-08-07", "2021-07-29", - few points
+
+# ggplot(df, aes(min_since_sunset, temperature, col = site))+geom_point()+facet_wrap(~date(time))
+# ggplot(df, aes(min_since_sunset, wind, col = site))+geom_point()+facet_wrap(~date(time))
 
 df$site %>% unique()
+df$location <- NA
+df$location[df$site == "U"]
+
+## join buzz count
+load("../../../Dropbox/MPI/BatsandGrass/Data/buzz_count.robj")
+
+unique(paste(buzz_df$site, buzz_df$loc))
+df

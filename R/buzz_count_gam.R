@@ -47,15 +47,16 @@ files <- files[-which(experiment == "ScentExperiment2021")]
 filenames <- {}
 filenames <- sapply(strsplit(files, "/"), "[", 8)
 filenames[which(is.na(filenames))] <- sapply(strsplit(files[which(is.na(filenames))], "/"), "[", 7)
-filenames[which(nchar(filenames) < 20)] <- sapply(strsplit(files[which(nchar(filenames) < 20)], "/"), "[", 9)
+filenames[which(nchar(filenames) < 18)] <- sapply(strsplit(files[which(nchar(filenames) < 18)], "/"), "[", 9)
 files[which(is.na(filenames))]
 table(nchar(filenames))
 
-filenames[nchar(filenames) == 27] <- substr(filenames[nchar(filenames) == 27], 5, 27)
+filenames[which(nchar(filenames) == 27)] <- substr(filenames[which(nchar(filenames) == 27)], 5, 27)
 
 date <- substr(filenames, 1, 8) %>% ymd
 time <- substr(filenames, nchar(filenames)-9, nchar(filenames)-4)
 datetime <- ymd_hms(paste(date, time))
+filenames[datetime %>% is.na %>% which]
 
 loc <- sapply(strsplit(files, "/"), "[", 3)
 loc %>% unique
@@ -70,6 +71,17 @@ year %>% unique
 
 
 paste0(year, date, loc) %>% table
+
+# parse filenames
+
+fdate <- sapply(strsplit(filenames, "-"), "[", 1) %>% as.Date
+floctime <- sapply(strsplit(filenames, "-"), "[", 2)
+files[is.na(floctime) %>% which]
+nchar(floctime) %>% table
+
+ftime <- sapply(strsplit(floctime, "_"), "[", 2)
+floc <- sapply(strsplit(floctime, "_"), "[", 1)
+
 
 # put everything together in a data.table
 df <- data.table(year, site = loc, loc = floc, date, time, datetime)
@@ -88,7 +100,7 @@ df %>% group_by(year, date, site) %>%
 ### fill in buzzes
 
 bdf$where %>% unique
-bdf$where[bdf$where == "Hockgraben Uni"] <- "Hockgraben"
+bdf$where[bdf$where == "Hockgraben Uni"] <- "Uni"
 
 df$buzz <- 0
 df$species <- NA
@@ -104,20 +116,23 @@ for(i in 1:nrow(bdf)){
   df$species[idx] <- bdf$species[i]
 }
 
+df$species %>% unique
 sum(df$buzz)
 df$buzz %>% table
-# why is the total so low?
+
+df$yday <- yday(df$datetime)
+
+buzz_df <- df
+save(bdf, buzz_df, file = "../../../Dropbox/MPI/BatsandGrass/Data/buzz_count.robj")
 
 
 
 
-fdate <- sapply(strsplit(filenames, "-"), "[", 1) %>% as.Date
-floctime <- sapply(strsplit(filenames, "-"), "[", 2)
-files[is.na(floctime) %>% which]
-nchar(floctime) %>% table
 
-ftime <- sapply(strsplit(floctime, "_"), "[", 2)
-floc <- sapply(strsplit(floctime, "_"), "[", 1)
+
+
+
+
 
 #which files didn't parse well?
 # floctime[which(is.na(floc))]
