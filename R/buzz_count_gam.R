@@ -129,6 +129,7 @@ for(i in 1:nrow(bdf)){
     buzz_df$species[idx] <- bdf$species[i]
   }
 }
+# buzz counts are too low...
 
 buzz_df$species %>% unique
 sum(buzz_df$buzz, na.rm = TRUE)
