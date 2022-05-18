@@ -4,20 +4,20 @@ p_load(warbleR, seewave, tuneR)
        # install = TRUE,
        # update = TRUE)
 
-hd <- "D:/batsandgrass/"
+hd <- "D:/batsandgrass/"#2020/rawdata_batandinsectscreening/Voliere/"
 
-years <- 2020:2021
-l = 2
+years <- 2020#:2021
+l = 1
 for(l in 1:length(years)){
   folders <- list.dirs(path = paste0(hd, years[l]), recursive = FALSE)
   k = 1
-  for(k in 1:length(folders)){
+  for(k in 1){#:length(folders)){
     folder <- folders[k]
     dirs <- {}
     # wd <- paste0(hd, folder, "/")
     try(dirs <- list.dirs(folder, full.names = TRUE, recursive = TRUE))
-    i = 8
-    for(i in 1:length(dirs)){
+    i = 458
+    for(i in 458:length(dirs)){
       print(dirs[i])
       print(paste("wav files:", length(list.files(path = dirs[i], pattern = ".wav", ignore.case = TRUE))))
       if(length(list.files(path = dirs[i], pattern = ".wav", ignore.case = TRUE)) > 0){
@@ -38,10 +38,21 @@ for(l in 1:length(years)){
 
 # ovlp = 10 to speed up function
 # tiff image files are better quality and are faster to produce
-full_spectrograms(sxrow = 0.5, rows = 10, pal = seewave::reverse.gray.colors.2, wl = 1024,
+hd <- "D:/batsandgrass/2020/rawdata_batandinsectscreening/Voliere/"
+dirs <- list.dirs(hd, recursive = TRUE)
+for(i in 1:length(dirs))
+setwd(dirs[i])
+full_spectrograms(sxrow = 0.5, rows = 10, pal = seewave::reverse.gray.colors.2,
+                  wl = 1024,
                   flim = c(20,80), overwrite = FALSE,
-                  fast.spec = TRUE, parallel = 40, it = "jpeg",
-                  path = "/Users/Edward/Downloads/")
+                  fast.spec = TRUE,
+                  parallel = 2,
+                  it = "jpeg",
+                  path = "C:/Users/Edward/Desktop/test_wav/")
+
+
+
+
 
 # We can zoom in on the frequency axis by changing flim,
 # the number of seconds per row, and number of rows
