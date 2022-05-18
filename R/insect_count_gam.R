@@ -103,6 +103,7 @@ sum(df$insects >= 10)/nrow(df) # 2.1% of minutes contain swarms
 
 load("../../../Dropbox/MPI/BatsandGrass/Data/buzz_count.robj")
 buzz_df$year <- as.numeric(buzz_df$year)
+buzz_df$buzz %>% table
 
 # monitoring data
 m <- full_join(df, buzz_df[,-c("loc", "date", "time", "yday")],
@@ -112,7 +113,7 @@ which(!is.na(m$insects) & !is.na(m$buzz))
 
 ## get sunset times
 dates <- unique(date(m$datetime))
-dates <- dates[order(dates)]
+dates <- na.omit(dates[order(dates)])
 sunset <- suncalc::getSunlightTimes(date = seq.Date(dates[1], dates[length(dates)], by = 1), lat = 47.6904, lon = 9.1869, tz = "CET")
 m$sunset <- ymd_hms("2000-01-01 12:00:00", tz = "CET")
 
@@ -124,7 +125,9 @@ for(i in 1:nrow(m)){
 
 m$min_since_sunset <- as.numeric(m$datetime - (m$sunset+2*3600))/60
 range(m$min_since_sunset)
-m[(m$min_since_sunset) < -500,]
+m <- m[-which(m$min_since_sunset < -30),]
+# m[which(m$min_since_sunset < 0),] %>% View
+
 hist((m$min_since_sunset), breaks = 1000)
 
 plot(m$datetime[1:100], m$min_since_sunset[1:100])
@@ -146,13 +149,14 @@ wind$time <- ymd_h(wind$MESS_DATUM, tz = "CET")
 plot(wind$time, wind$F)
 m$temperature <- NA
 m$wind <- NA
+i = 1
 
 for(i in 1:nrow(m)){
   tidx <- which.min(abs(temp$time - (m$datetime[i]-2*3600)))
   widx <- which.min(abs(wind$time - (m$datetime[i]-2*3600)))
-  # m$time[i]
-  # temp[tidx,]
-  # wind[widx,]
+  m$datetime[i]
+  temp[tidx,]
+  wind[widx,]
   m$temperature[i] <- temp$TT_TU[tidx]
   m$wind[i] <- wind$F[widx]
 }
@@ -163,45 +167,175 @@ table(m$meadow)
 
 m <- m[m$meadow != "Guettingen",]
 
+############################################################
+# prep data for models
+
 M <- m %>% group_by(meadow, datetime, yday, year, grassheight,
                     temperature, wind, min_since_sunset) %>%
-  summarise(insects = mean(insects),
-            buzz = mean(buzz),
+  summarise(insects = round(max(insects),0),
+            buzz = round(max(buzz),0),
             count = n())
+M$insects %>% range(na.rm = TRUE)
+
+### Summarize insect data
+sum(M$insects > 0, na.rm = TRUE)/length(which(!is.na(M$insects)))
+sum(m$insects > 0, na.rm = TRUE)/length(which(!is.na(m$insects)))
+
+sum(m$insects >= 10, na.rm = TRUE)/length(which(!is.na(m$insects)))
+sum(M$insects >= 10, na.rm = TRUE)/length(which(!is.na(M$insects)))
+
+layout(1)
+M$insects %>% hist(breaks = 1000, main = "")
+M$insects %>%
+  na.omit %>%
+  # log %>%
+  density(bw = 0.5, n = 1000) %>%
+  plot
+M$meadow %>% table
+M$meadow <- as.factor(M$meadow)
+M$year <- as.factor(M$year)
 
 g1 <- gam(insects~
-            s(as.numeric(yday))+
-            s(as.numeric(min_since_sunset))+
+            s(yday)+
+            s(min_since_sunset)+
             s(grassheight)+
             s(temperature)+
-            s(wind, k = 10)+
-            as.factor(year)+meadow,
+            # s(wind)+
+            s(year, bs = "re")+
+            s(meadow, bs = "re"),
           data = M,
-          family = negbin(theta = 0.62),
+          family = ziP(),#negbin(theta = 0.62),
           method = "REML")
+
+g1$outer.info
+
 summary(g1)
-plot(g1)
-gam.check(g1)
+#layout(rbind(c(0,1,2), c(3,4,5)))
+plot(g1, pages = 1, unconditional = TRUE, rug = TRUE)
+layout(rbind(c(1,2), c(3,4)))
+gam.check(g1, pages = 1)
+
+thb <- g1$family$getTheta()
+g0 <- gam(insects~
+            s(yday)+
+            s(min_since_sunset)+
+            s(grassheight)+
+            s(temperature)+
+            # s(wind)+
+            s(year, bs = "re")+
+            s(meadow, bs = "re"),
+          data = M,
+          family=ziP(theta=thb))
+
+g0 %>% summary
+plot(g0, pages = 1, unconditional = TRUE, rug = TRUE, scale = 0)
+gam.check(g0, pages = 1)
+
+g2 <- gam(insects~
+            s(yday)+
+            s(min_since_sunset)+
+            s(grassheight)+
+            s(temperature)+
+            # s(wind)+
+            s(year, bs = "re")+
+            s(meadow, bs = "re"),
+          data = M,
+          family = ziP(b = .3),#negbin(theta = 0.62),
+          method = "REML")
+
+AIC(g0, g1, g2)
+g0$outer.info
+
+############################################################
+# summarize buzz data
+####
+
+sum(M$buzz, na.rm = TRUE)/length(which(!is.na(M$buzz)))
+sum(m$buzz, na.rm = TRUE)/length(which(!is.na(m$buzz)))
+
+m$buzz[which(!is.na(m$buzz))]
 
 M$buzz %>% table()
+m$buzz %>% table()
+
+layout(rbind(1,2))
+M$insects %>% hist(breaks = 1000, main = "")
+M$buzz %>% hist(breaks = 1000, main = "")
+
+Mday <- M %>% group_by(meadow, year, yday) %>%
+  summarise(temp = mean(temperature, na.rm = TRUE),
+            wind = mean(wind, na.rm = TRUE),
+            grassheight = mean(grassheight, na.rm = TRUE),
+            insects = mean(insects, na.rm = TRUE),
+            buzz = mean(buzz, na.rm = TRUE))
+Mday
+
+layout(rbind(1,2,3))
+plot(Mday$yday, Mday$temp, col = Mday$year)
+plot(Mday$yday, Mday$wind, col = Mday$year)
+plot(Mday$yday, Mday$grassheight, col = Mday$year)
+
+layout(rbind(1,2))
+plot(Mday$yday, Mday$insects, col = Mday$year)
+plot(Mday$yday, Mday$buzz, col = Mday$year)
+
 b1 <- gam(buzz~
+            s(yday)+
+            s(min_since_sunset)+
+            s(grassheight)+
+            s(temperature)+
+            # s(wind)+
+            as.factor(year)+meadow,
+          data = M,
+          family = ziP(),#negbin(theta = 0.62),
+          method = "REML")
+b1$outer.info
+summary(b1)
+plot(b1, pages = 1, unconditional = TRUE, scale = 0)
+M$buzz %>% table
+
+layout(cbind(c(1,2), c(3,4)))
+gam.check(b1)
+
+range(predict(b1,type="response")[b1$y==0])
+
+par(mfrow=c(2,2))
+plot(predict(b1,type="response"),residuals(b1))
+plot(predict(b1,type="response"),b1$y);abline(0,1,col=2)
+plot(b1$linear.predictors,b1$y)
+qq.gam(b1,rep=20,level=1)
+
+thb <- b1$family$getTheta()
+b0 <- gam(buzz~
+            s(yday)+
+            s(min_since_sunset)+
+            s(grassheight)+
+            s(temperature)+
+            # s(wind)+
+            as.factor(year)+meadow,
+          data = M,
+          family=ziP(theta=thb))
+
+b0 %>% summary
+plot(b0, pages = 1, unconditional = TRUE, scale = 0, rug = TRUE)
+gam.check(b0, pages=1)
+
+b2 <- gam(buzz~
             s(as.numeric(yday))+
             s(as.numeric(min_since_sunset))+
             s(grassheight)+
             s(temperature)+
-            s(wind, k = 10)+
+            # s(wind)+
             as.factor(year)+meadow,
           data = M,
-          family = negbin(theta = 0.62),
-          method = "REML")
-summary(b1)
-plot(b1)
-gam.check(b1)
+          family=ziP(b=.3))
+
+b2 %>% summary
+
+AIC(b0, b1, b2)
 
 
-corrplot(cor(M[,c("yday", "temperature", "wind", "min_since_sunset")]), method = "number")
-
-save(M, m, g1, file = "insect_gam.robj")
+save(M, m, g0, g1, g2, b0, b1, b2, file = "../../../Dropbox/MPI/BatsandGrass/Data/insect_gam.robj")
 
 load("insect_gam.robj")
 

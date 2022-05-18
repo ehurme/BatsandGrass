@@ -95,7 +95,7 @@ loc <- sapply(strsplit(floctime, "_"), "[", 1)
 
 
 # put everything together in a data.table
-buzz_df <- data.table(year, meadow, loc, location, date, time, datetime)
+buzz_df <- data.table(year, meadow, loc, location, date, time, datetime, filenames)
 # # remove recordings after midnight?
 
 # df <- df[which(df$time %>% as.numeric > 150000),]
@@ -110,6 +110,7 @@ buzz_df %>% group_by(year, date, meadow, location) %>%
 
 ### fill in buzzes
 
+bdf$filenames <- paste0(sapply(strsplit(bdf$buzzfile_na_means_no_buzz, "--"), "[", 1), ".WAV")
 bdf$where %>% unique
 bdf$where[bdf$where == "Hockgraben Uni"] <- "Uni"
 bdf$location <- "edge"
@@ -118,21 +119,46 @@ bdf$location[bdf$camera == "Mitte"] <- "middle"
 buzz_df$buzz <- 0
 buzz_df$species <- NA
 
+NAs <- {}
 i = 1
 for(i in 1:nrow(bdf)){
   idx <- {}
-  idx <- which(bdf$where[i] == buzz_df$meadow &
-                 bdf$timestamp[i] == buzz_df$datetime &
+  bdf[i,]
+  idx <- which(bdf$filenames[i] == buzz_df$filenames)
+
+  if(length(idx) > 1){
+    idx <- which(bdf$filenames[i] == buzz_df$filenames &
+                 bdf$where[i] == buzz_df$meadow &
                  bdf$location[i] == buzz_df$location)
-  if(length(idx) > 0){
-    buzz_df$buzz[idx] <- df$buzz[idx] + 1
-    buzz_df$species[idx] <- bdf$species[i]
+  }
+
+  buzz_df[idx]
+  bdf[i,]
+  if(length(idx) == 0){
+    NAs <- c(NAs, i)
+  }
+
+
+  if(length(idx) == 1){
+    buzz_df$buzz[idx] <- buzz_df$buzz[idx] + 1
+    if(is.na(buzz_df$species[idx])){
+      buzz_df$species[idx] <- bdf$species[i]
+    }
+    else{
+      buzz_df$species[idx] <- paste(buzz_df$species[idx], bdf$species[i])
+    }
+
   }
 }
-# buzz counts are too low...
+bdf[NAs,]
+NAs %>% length
+
+buzz_df$buzz %>% table
 
 buzz_df$species %>% unique
 sum(buzz_df$buzz, na.rm = TRUE)
+sum(!is.na(bdf$buzzfile_na_means_no_buzz))
+
 buzz_df$buzz %>% table
 
 buzz_df$yday <- yday(buzz_df$datetime)
