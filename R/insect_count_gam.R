@@ -137,8 +137,8 @@ m <- m[m$datetime > ymd("2020-01-01"),]
 
 
 ## add weather data
-temp <- fread("../../../Dropbox/MPI/BatsandGrass/Data/produkt_tu_stunde_20070401_20211231_00044.txt")
-wind <- fread("../../../Dropbox/MPI/BatsandGrass/Data/produkt_ff_stunde_20201001_20211231_15801.txt")
+temp <- fread("../../../Dropbox/MPI/BatsandGrass/Data/produkt_tu_stunde_19710101_20211231_02712.txt")
+wind <- fread("../../../Dropbox/MPI/BatsandGrass/Data/produkt_ff_stunde_19590701_20211231_02712.txt")
 
 temp$TT_TU[temp$TT_TU < -200] <- NA
 temp$time <- ymd_h(temp$MESS_DATUM, tz = "CET")
@@ -201,8 +201,8 @@ g1 <- gam(insects~
             s(grassheight)+
             s(temperature)+
             # s(wind)+
-            s(year, bs = "re")+
-            s(meadow, bs = "re"),
+            year+ #, bs = "re")+
+            meadow,# bs = "re"),
           data = M,
           family = ziP(),#negbin(theta = 0.62),
           method = "REML")
@@ -211,9 +211,13 @@ g1$outer.info
 
 summary(g1)
 #layout(rbind(c(0,1,2), c(3,4,5)))
-plot(g1, pages = 1, unconditional = TRUE, rug = TRUE)
+plot(g1, pages = 1, unconditional = TRUE, rug = TRUE,
+     all.terms = TRUE, seWithMean = TRUE,
+     scale = 0, shift = coef(g1)[1])
+     # col = rgb(0,0,0,.01), pch = 1)
 layout(rbind(c(1,2), c(3,4)))
 gam.check(g1, pages = 1)
+concurvity(g1, full = FALSE)
 
 thb <- g1$family$getTheta()
 g0 <- gam(insects~
@@ -337,7 +341,7 @@ AIC(b0, b1, b2)
 
 save(M, m, g0, g1, g2, b0, b1, b2, file = "../../../Dropbox/MPI/BatsandGrass/Data/insect_gam.robj")
 
-load("insect_gam.robj")
+load("../../../Dropbox/MPI/BatsandGrass/Data/insect_gam.robj")
 
 dates <- unique(date(m$time))
 i = 1
