@@ -1,6 +1,6 @@
 library(pacman)
 
-p_load(warbleR, seewave, tuneR)
+p_load(warbleR, seewave, tuneR, parallel)
        # install = TRUE,
        # update = TRUE)
 
@@ -40,17 +40,30 @@ for(l in 1:length(years)){
 # tiff image files are better quality and are faster to produce
 hd <- "D:/batsandgrass/2020/rawdata_batandinsectscreening/Voliere/"
 dirs <- list.dirs(hd, recursive = TRUE)
-for(i in 1:length(dirs))
+i = 10
+
+n.cores <- parallel::detectCores() - 1
+#create the cluster
+my.cluster <- parallel::makeCluster(
+  n.cores,
+  type = "PSOCK",
+  outfile=""
+)
+doParallel::registerDoParallel(cl = my.cluster)
+foreach::getDoParRegistered()
+foreach::getDoParWorkers()
+
+for(i in 13:length(dirs)){
 setwd(dirs[i])
-full_spectrograms(sxrow = 0.5, rows = 10, pal = seewave::reverse.gray.colors.2,
+try(full_spectrograms(sxrow = 0.5, rows = 10, pal = seewave::reverse.gray.colors.2,
                   wl = 1024,
                   flim = c(20,80), overwrite = FALSE,
                   fast.spec = TRUE,
-                  parallel = 2,
+                  parallel = 1,
                   it = "jpeg",
-                  path = "C:/Users/Edward/Desktop/test_wav/")
+                  path = dirs[i]))
 
-
+}
 
 
 

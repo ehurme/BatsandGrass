@@ -3,7 +3,7 @@
 ## load libraries
 library(pacman)
 p_load(data.table, lubridate, tidyverse, ggplot2,
-       mgcv, suncalc, janitor, corrplot)
+       mgcv, suncalc, janitor, corrplot, GGally)
 
 ## load the data
 ### 2020
@@ -195,12 +195,29 @@ M$meadow %>% table
 M$meadow <- as.factor(M$meadow)
 M$year <- as.factor(M$year)
 
+# some grass heights seem like outliers
+hist(M$grassheight[M$grassheight <80])
+M <- M[-which(M$grassheight > 80),]
+
+
+# plot data
+psych::pairs.panels(M[,c("yday", "min_since_sunset", "grassheight", "temperature", "wind", "insects", "buzz")])
+x11()
+
+ggplot(m, aes(min_since_sunset, temperature, col = meadow))+geom_point()+facet_wrap(~date(datetime))
+# ggplot(m, aes(min_since_sunset, wind, col = site))+geom_point()+facet_wrap(~date(time))
+
+# remove dates with few points
+which(table(date(M$datetime)) < 100) %>% names
+
+
+
 g1 <- gam(insects~
             s(yday)+
             s(min_since_sunset)+
             s(grassheight)+
             s(temperature)+
-            # s(wind)+
+            s(wind)+
             year+ #, bs = "re")+
             meadow,# bs = "re"),
           data = M,
@@ -358,8 +375,7 @@ m[date(m$time) == "2020-08-13",]
 # "2020-08-14", "2020-08-18",  - only two points
 # "2021-08-13", "2021-08-03", "2021-07-23", "2021-08-20", "2021-08-07", "2021-07-29", - few points
 
-# ggplot(m, aes(min_since_sunset, temperature, col = site))+geom_point()+facet_wrap(~date(time))
-# ggplot(m, aes(min_since_sunset, wind, col = site))+geom_point()+facet_wrap(~date(time))
+
 
 
 
