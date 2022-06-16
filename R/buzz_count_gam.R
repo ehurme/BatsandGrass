@@ -35,6 +35,9 @@ load("../../../Dropbox/MPI/BatsandGrass/Data/audio_files.robj")
 files <- files[-c(which(grepl("Spectro", files)),
                  which(grepl("scent", files)))]
 
+grep(pattern = "Wollmatingen", files)
+grep(pattern = "Hegne", files)
+
 # remove scent experiment files
 experiment <- sapply(strsplit(files, "/"), "[", 2)
 experiment %>% table
@@ -46,11 +49,12 @@ location <- sapply(strsplit(files, "/"), "[", 6)
 location[nchar(location) == 10] <- sapply(strsplit(files[nchar(location)==10], "/"), "[", 7)
 location[nchar(location) == 5] <- sapply(strsplit(files[nchar(location)==5], "/"), "[", 7)
 location[nchar(location) == 22] <- sapply(strsplit(files[nchar(location)==22], "/"), "[", 6)
+location[nchar(location) == 19] <- sapply(strsplit(files[nchar(location)==19], "/"), "[", 6)
 location[location == "Audiomoth"] <- sapply(strsplit(files[location=="Audiomoth"], "/"), "[", 5)
 location[location == "10.08"] <- sapply(strsplit(files[location=="10.08"], "/"), "[", 6)
 
 location[location == "Edge" | location == "Rand"] <- "edge"
-location[location == "Middle" | location == "Mitte"] <- "middle"
+location[location == "Middle" | location == "Mitte" | location == "MItte"] <- "middle"
 
 location %>% table
 
@@ -59,6 +63,7 @@ filenames <- {}
 filenames <- sapply(strsplit(files, "/"), "[", 8)
 filenames[which(is.na(filenames))] <- sapply(strsplit(files[which(is.na(filenames))], "/"), "[", 7)
 filenames[which(nchar(filenames) < 18)] <- sapply(strsplit(files[which(nchar(filenames) < 18)], "/"), "[", 9)
+# filenames[which(nchar(filenames) == 19)] <- sapply(strsplit(files[which(nchar(filenames) == 19)], "/"), "[", 6)
 files[which(is.na(filenames))]
 table(nchar(filenames))
 
@@ -73,6 +78,8 @@ meadow <- sapply(strsplit(files, "/"), "[", 3)
 meadow %>% unique
 meadow[meadow == "St.Katharina"] <- "StKatharina"
 meadow[meadow == "Hockgraben UnI"] <- "Hockgraben"
+meadow[meadow == "Institutswiese"] <- "Institute"
+meadow[meadow == "Scheunenwiese"] <- "Scheune"
 
 meadow %>% table
 which(is.na(meadow))
@@ -85,7 +92,7 @@ paste0(date, meadow, location) %>% table
 
 # parse filenames
 
-fdate <- sapply(strsplit(filenames, "-"), "[", 1) %>% as.Date
+# fdate <- sapply(strsplit(filenames, "-"), "[", 1) %>% as.Date
 floctime <- sapply(strsplit(filenames, "-"), "[", 2)
 files[is.na(floctime) %>% which]
 nchar(floctime) %>% table
@@ -163,9 +170,16 @@ buzz_df$buzz %>% table
 
 buzz_df$yday <- yday(buzz_df$datetime)
 
+buzz_df$loc[buzz_df$meadow == "Voliere" & buzz_df$location == "middle"] <- "Vm"
+buzz_df$loc[buzz_df$meadow == "Voliere" & buzz_df$location == "edge"] <- "Vr"
+
+buzz_df$loc %>% table
+
+
 save(bdf, buzz_df, file = "../../../Dropbox/MPI/BatsandGrass/Data/buzz_count.robj")
 
-
+buzz_df$meadow %>% table
+buzz_df[which(buzz_df$meadow == "Institutswiese"),]
 
 
 

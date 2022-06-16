@@ -4,8 +4,10 @@
 
 library(pacman)
 p_load(data.table, lubridate, tidyverse, ggplot2,
-       mgcv, suncalc, janitor, corrplot, GGally)
-
+       mgcv, suncalc, janitor, corrplot, GGally,
+       hablar,  # prevents summarise from returning -Inf when getting max(NA)
+       ggpubr,
+       MASS, lme4)
 
 # 2 Load data ---------------------------------------------------------------
 ## 2.1 2020 ----
@@ -87,7 +89,7 @@ df$meadow[df$loc == "S"] <- "Scheune"
 df$meadow[df$loc == "SK"] <- "St.Katharina"
 df$meadow[df$loc == "T"] <- "Tannenhof"
 df$meadow[df$loc == "U"] <- "Uni"
-df$meadow[df$loc == "UK"] <- "UniKurve"
+df$meadow[df$loc == "UK"] <- "Uni"
 df$meadow[df$loc == "V"] <- "Voliere"
 df$meadow[df$loc == "W"] <- "Wollmatingen"
 df$meadow[df$loc == "M"] <- "Mill"
@@ -107,15 +109,32 @@ summary(df$insects)
 load("../../../Dropbox/MPI/BatsandGrass/Data/buzz_count.robj")
 buzz_df$year <- as.numeric(buzz_df$year)
 buzz_df$buzz %>% table
+buzz_df$loc <- substr(buzz_df$loc, 1, (nchar(buzz_df$loc)-1))
+
+buzz_df$meadow %>% table
+df$meadow %>% table
 
 buzz_df$buzz %>% is.na %>% which
 (buzz_df$buzz != 0) %>% which %>% length/nrow(buzz_df)
 max(buzz_df$buzz)
-m <- full_join(df, buzz_df[,-c("loc", "date", "time", "yday")],
+m <- full_join(df[,c(2:3, 5:7,9)],
+               buzz_df[,-c("date", "loc", "time", "yday", "filenames")],
                by = c("year", "datetime", "meadow", "location"))
+m %>% nrow # 54141
+m$buzz %>% table
+m$buzz %>% sum(na.rm = TRUE) #429
+m$insects %>% table
+m$insects %>% sum(na.rm = TRUE) # 44948
 
-which(!is.na(m$insects) & !is.na(m$buzz))
-
+which(!is.na(m$insects) & !is.na(m$buzz)) %>% length
+# m[which(!is.na(m$insects) & is.na(m$buzz)),] %>% View()
+table(paste0(m$datetime, m$meadow)) %>% hist
+which(table(paste0(m$datetime, m$meadow)) == 4)
+m[which(m$datetime == ymd_hms("2021-07-20 22:01:00") &
+          m$meadow == "Uni"),]
+m[which(m$datetime == ymd_hms("2020-08-11 22:44:00") &
+          m$meadow == "StKatharina"),]
+m %>% nrow() # 61454
 ## 2.4 add sunset times ----
 dates <- unique(date(m$datetime))
 dates <- na.omit(dates[order(dates)])
@@ -144,8 +163,10 @@ wind <- fread("../../../Dropbox/MPI/BatsandGrass/Data/produkt_ff_stunde_19590701
 
 temp$TT_TU[temp$TT_TU < -200] <- NA
 temp$time <- ymd_h(temp$MESS_DATUM, tz = "CET")
+temp <- temp[temp$time > min(m$datetime, na.rm = TRUE),]
 
 wind$time <- ymd_h(wind$MESS_DATUM, tz = "CET")
+wind <- wind[wind$time > min(m$datetime, na.rm = TRUE),]
 
 plot(wind$time, wind$F)
 m$temperature <- NA
@@ -153,16 +174,19 @@ m$wind <- NA
 i = 1
 
 for(i in 1:nrow(m)){
-  tidx <- which.min(abs(temp$time - (m$datetime[i]-2*3600)))
-  widx <- which.min(abs(wind$time - (m$datetime[i]-2*3600)))
-  m$datetime[i]
-  temp[tidx,]
-  wind[widx,]
-  m$temperature[i] <- temp$TT_TU[tidx]
-  m$wind[i] <- wind$F[widx]
+  try({
+    tidx <- which.min(abs(temp$time - (m$datetime[i]-2*3600)))
+    widx <- which.min(abs(wind$time - (m$datetime[i]-2*3600)))
+    m$datetime[i]
+    temp[tidx,]
+    wind[widx,]
+    m$temperature[i] <- temp$TT_TU[tidx]
+    m$wind[i] <- wind$F[widx]
+  })
 }
-
 m$yday <- yday(m$datetime)
+# save(m, df, df21, df20, file = "insect_buzz_with_weather.robj")
+
 summary(m)
 table(m$meadow)
 
@@ -170,51 +194,94 @@ m <- m[m$meadow != "Guettingen",]
 m$meadow[m$meadow == "St.Katharina"] <- "StKatharina"
 m$meadow[m$meadow == "Institutswiese"] <- "Institute"
 m$meadow[m$meadow == "Scheunenwiese"] <- "Scheune"
-m$meadow %>% unique
+m$meadow %>% table
 
 ## 2.6 prep data for models ----
 m$datetime <- round_date(m$datetime, unit = "min")
+table(paste0(m$datetime, m$meadow)) %>% hist
+m[which(m$datetime == ymd_hms("2020-08-11 22:44:00") &
+          m$meadow == "StKatharina"),] %>% View()
+m %>% nrow # 54139
+m <- m[which(!is.na(m$meadow)),]
 
 M <- m %>% group_by(meadow, datetime, yday, year, min_since_sunset) %>%
-  summarise(insects = round(max(insects),0),
-            buzz = round(max(buzz),0),
+  summarise(insects = round(max(s(insects)),0),
+            buzz = round(max(s(buzz)),0),
             count = n(),
-            grass = max(grassheight),
-            temp = max(temperature),
-            windsp = max(wind))
+            grass = max(s(grassheight)),
+            temp = max(s(temperature)),
+            windsp = max(s(wind)))
 summary(M)
+summary(m)
+
 which(duplicated(paste0(M$meadow, M$datetime)))
 
 # remove recordings past
 M_clean <- M[M$min_since_sunset <= 150,]
 M_clean <- M_clean[M_clean$min_since_sunset >= -30,]
-paste0(M_clean$meadow, date(M_clean$datetime)) %>% table %>%
+paste0(M_clean$meadow, date(M_clean$datetime)) %>% table %>% length
   hist(main = "minutes sampled", breaks = 30)
 
-idx <- which(paste0(M_clean$meadow, date(M_clean$datetime)) == "Scheune2020-08-10")
-M_clean[idx,] %>% View()
+M_clean$meadow[which(!is.na(M_clean$buzz))] %>% table
+paste0(M_clean$meadow[which(!is.na(M_clean$buzz))],
+       date(M_clean$datetime[which(!is.na(M_clean$buzz))])) %>% table  %>% length
 
-## 3.3 Summarize insect data ----
-sum(M_clean$insects == 0, na.rm = TRUE)/length(which(!is.na(M_clean$insects)))
-## 47.9% of minutes monitored have insects present (combined between cameras at a site)
-sum(m$insects == 0, na.rm = TRUE)/length(which(!is.na(m$insects)))
-## 31.7% of minutes monitored at each camera had insects present
+# idx <- which(paste0(M_clean$meadow, date(M_clean$datetime)) == "Scheune2020-08-10")
+# M_clean[idx,] %>% View()
+
+## 2.7 Summarize insect data ----
+sum(M_clean$insects > 0, na.rm = TRUE)/length(which(!is.na(M_clean$insects)))
+## 49.9% of 16980 minutes monitored have insects present (combined between cameras at a site)
+sum(m$insects > 0, na.rm = TRUE)/length(which(!is.na(m$insects)))
+## 31.7% of 42324 minutes monitored (multiple platforms) had insects present
 
 sum(M_clean$insects >= 10, na.rm = TRUE)/length(which(!is.na(M_clean$insects)))
-## 4.1% of minutes have swarms
-max(M_clean$insects, na.rm = TRUE)
+## 4.2% of 16980 minutes have swarms
+max(M_clean$insects, na.rm = TRUE) # 105 max swarm size
 sum(m$insects >= 10, na.rm = TRUE)/length(which(!is.na(m$insects)))
-## 2% of minutes monitored have swarms of insects
+## 2% of 42324 minutes monitored (multiple platforms) have swarms of insects
 
-## 4.1 Summarize buzz data ----
+## 2.8 Summarize buzz data ----
+sum(M_clean$buzz > 0, na.rm = TRUE)/length(which(!is.na(M_clean$buzz)))
+## 1.9% of 14025 minutes have buzzes
+sum(m$buzz > 0, na.rm = TRUE)/length(which(!is.na(m$buzz)))
+## 0.9% of 33618 minutes have buzzes
 
-sum(M_clean$buzz, na.rm = TRUE)/length(which(!is.na(M_clean$buzz)))
-sum(m$buzz, na.rm = TRUE)/length(which(!is.na(m$buzz)))
+### seems high. How many points are filtered out?
+## m
+c(which(m$min_since_sunset[which(!is.na(m$buzz))] < -30),
+  which(m$min_since_sunset[which(!is.na(m$buzz))] > 150)) %>% length
+# 7112 out
+c(which(m$min_since_sunset[which(!is.na(m$buzz))] > -30),
+  which(m$min_since_sunset[which(!is.na(m$buzz))] < 150)) %>% length
+# 59896 in
+## M
+c(which(M$min_since_sunset[which(!is.na(M$buzz))] < -30),
+  which(M$min_since_sunset[which(!is.na(M$buzz))] > 150)) %>% length
+# 3717 out
+c(which(M$min_since_sunset[which(!is.na(M$buzz))] > -30),
+  which(M$min_since_sunset[which(!is.na(M$buzz))] < 150)) %>% length
+# 31643 in
+
+31643/59896
+#1/2 is right
 
 m$buzz[which(!is.na(m$buzz))]
 
 M_clean$buzz %>% table()
 m$buzz %>% table()
+
+
+### Figure 1
+#### Histograms insects buzzes
+layout(c(1,2))
+par(mar = c(4,4,1,2))
+M_clean$insects %>% hist(breaks = 100, main = "",
+                         xlab = "insects per min")
+M_clean$buzz %>% hist(breaks = 100, main = "", xlab = "buzzes per min")
+
+M_clean$insects %>% log() %>% hist(breaks = 100, main = "", xlab = "log(insects per min)")
+M_clean$buzz %>% log() %>% hist(breaks = 100, main = "", xlab = "log(buzzes per min)")
 
 
 # 3 Insect summary ----
@@ -226,20 +293,32 @@ Mday <- M_clean %>% group_by(meadow, year, yday) %>%
             end = max(datetime),
             length = n(),
             insect_sum = sum(insects, na.rm = TRUE),
-            insect_max = max(insects, na.rm = TRUE),
-            # insect_peak = datetime[which.max(insects)],
-            insect_start = min(datetime, na.rm = TRUE),
-            insect_end = max(datetime, na.rm = TRUE),
+            insect_max = max(s(insects)),
+            insect_peak = NA, # datetime[which.max(insects)],
+            insect_start = min(s(datetime)),
+            insect_end = max(s(datetime)),
             insect_duration = length(which(!is.na(insects))),
             swarm_sum = sum(insects >= 10, na.rm = TRUE),
             buzz_sum = sum(buzz, na.rm = TRUE),
-            buzz_max = max(buzz, na.rm = TRUE),
-            # buzz_peak = datetime[which.max(buzz)],
-            buzz_start = min(datetime),
-            buzz_end = max(datetime),
+            buzz_max = max(s(buzz)),
+            buzz_peak = NA, # datetime[which.max(buzz)],
+            buzz_start = min(s(datetime)),
+            buzz_end = max(s(datetime)),
             buzz_duration = sum(!is.na(buzz)))
-Mday
+i = 1
 
+## 3.1 time btwn pks ----
+for(i in 1:nrow(Mday)){
+  idx <- which(Mday$meadow[i] == M_clean$meadow &
+                 date(Mday$start[i]) == date(M_clean$datetime))
+  datetime <- M_clean$datetime[idx]
+  try(Mday$insect_peak[i] <- as.character(datetime[which.max(M_clean$insects[idx])]))
+  try(Mday$buzz_peak[i] <- as.character(datetime[which.max(M_clean$buzz[idx])]))
+}
+Mday$time_btw_peaks <- ((ymd_hms(Mday$buzz_peak) - ymd_hms(Mday$insect_peak))/60) %>% as.numeric
+
+Mday$time_btw_peaks %>% summary
+layout(1)
 hist(Mday$length, xlab = "minutes monitored", main = "")
 Mday <- Mday[Mday$length > 100,]
 
@@ -255,53 +334,89 @@ summary(Mday)
 Mday$meadow %>% unique
 
 sum(Mday$insect_sum)/sum(Mday$insect_duration)
+sum(Mday$buzz_sum)/sum(Mday$buzz_duration)
 
-ggplot(Mday, aes(y = insect_per_min, x = meadow))+geom_violin()+
+p1 <- ggplot(Mday, aes(y = insect_per_min, x = meadow))+geom_violin()+
+  ylab("insects per min")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+p2 <- ggplot(Mday, aes(y = buzz_per_min, x = meadow))+geom_violin()+
+  ylab("buzzes per min")+
+  theme_classic()+
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-## 3.1 time btwn pks ----
+ggarrange(p1,p2, ncol = 1)
+
+p1 <- ggplot(Mday, aes(y = insect_sum, x = meadow))+geom_violin()+
+  ylab("# of insects")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+p2 <- ggplot(Mday, aes(y = buzz_sum, x = meadow))+geom_violin()+
+  ylab("# of buzzes")+
+  theme_classic()+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggarrange(p1,p2, ncol = 1)
+
+
+ggplot(Mday, aes(y = insect_sum, x = buzz_sum))+geom_point()+
+  geom_smooth(method = "lm", col = "black")+
+  ylab("# of insects")+ xlab("# of buzzes")+
+  theme_classic()
+
+hist(Mday$insect_sum %>% log)
+
+## 3.2 Model insect vs buzz ----
+fit <- glm(insect_sum ~ buzz_sum+temperature+wind+grassheight,
+           data = Mday[Mday$insect_sum > 0,])
+fitl <- glm(log(insect_sum) ~ buzz_sum+temperature+wind+grassheight,
+            data = Mday[Mday$insect_sum > 0,])
+fitlm <- lmer(log(insect_sum)~buzz_sum+temperature+wind+grassheight+
+              (1|meadow),
+              data = Mday[Mday$insect_sum > 0,])
+fitnb <- glm.nb(insect_sum~buzz_sum+temperature+wind+grassheight,
+           data = Mday[Mday$insect_sum > 0,])
+
+summary(fitl)
+AIC(fit, fitl, fitlm, fitnb)
+
+
 with(Mday[Mday$insect_sum > 0 & Mday$buzz_sum > 0,],
      difftime(buzz_peak, insect_peak, units = "hours")) %>%
-       as.numeric %>% hist(breaks = 100)
+       as.numeric %>% hist(breaks = 100, main = "",
+                           xlab = "hours between insect and buzz peaks")
 
 with(Mday[Mday$insect_sum > 0 & Mday$buzz_sum > 0,],
      difftime(buzz_peak, insect_peak, units = "hours")) %>%
   as.numeric %>% summary
 
-ggplot(Mday, aes(x = yday, y = wind, col = factor(year)))+
-  geom_point()
-ggplot(Mday, aes(x = yday, y = temp, col = factor(year)))+
-  geom_point()
-ggplot(Mday, aes(x = yday, y = grassheight, col = factor(year)))+
-  geom_point()
+p1 <- ggplot(Mday, aes(x = yday, y = wind, col = factor(year)))+
+  geom_point()+theme_classic()
+p2 <- ggplot(Mday, aes(x = yday, y = temperature, col = factor(year)))+
+  geom_point()+theme_classic()
+p3 <- ggplot(Mday, aes(x = yday, y = grassheight, col = factor(year)))+
+  geom_point()+theme_classic()
+ggarrange(p1,p2,p3, ncol = 1)
 
-ggplot(Mday, aes(x = swarm_sum/insect_duration,
-                 y = insect_sum/insect_duration))+
-  geom_point()
 
 ggplot(Mday, aes(x = swarm_sum/insect_duration,
                  y = buzz_sum/buzz_duration))+
-  geom_point()
+  geom_point()+geom_smooth(method = "lm")
 
 ggplot(Mday, aes(x = insect_sum/insect_duration,
                  y = buzz_sum/buzz_duration))+
-  geom_point()
+  geom_point()+geom_smooth(method = "lm")
+## 3.3 pairs plot ----
+psych::pairs.panels(Mday[,c("yday", "temperature", "wind", "grassheight",
+                            "insect_per_min", "swarm_per_min", "buzz_per_min")])
 
-psych::pairs.panels(Mday[,c("yday", "temp", "wind", "grassheight",
-                            "insect_ratio", "swarm_ratio", "buzz_ratio")])
-
+## 3.4 Save data ----
 save(m, M, M_clean, Mday, file = "clean_merged_data.robj")
-
-fit1 <- glm(insect_ratio ~ year+yday+temp+wind+grassheight,
-      data = Mday)
-summary(fit1)
-
-## 5.1 pairs plot ----
-psych::pairs.panels(Mday)
+load("clean_merged_data.robj")
 
 
 layout(rbind(1,2,3))
-plot(Mday$yday, Mday$temp, col = Mday$year)
+plot(Mday$yday, Mday$temperature, col = Mday$year)
 plot(Mday$yday, Mday$wind, col = Mday$year)
 plot(Mday$yday, Mday$grassheight, col = Mday$year)
 
@@ -309,16 +424,11 @@ layout(rbind(1,2))
 plot(Mday$yday, Mday$insects, col = Mday$year)
 plot(Mday$yday, Mday$buzz, col = Mday$year)
 
-
-
-
-
-M$insects %>% range(na.rm = TRUE)
-
+M_clean$insects %>% range(na.rm = TRUE)
 
 layout(1)
-M$insects %>% hist(breaks = 1000, main = "")
-M$insects %>%
+M_clean$insects %>% hist(breaks = 1000, main = "")
+M_clean$insects %>%
   na.omit %>%
   # log %>%
   density(bw = 0.5, n = 1000) %>%
@@ -332,39 +442,18 @@ hist(M$grassheight[M$grassheight <80])
 M <- M[-which(M$grassheight > 80),]
 
 
-# 3 Clean up data ----
-
-## 3.1 insect pairs plot ----
-# psych::pairs.panels(M[,c("yday", "min_since_sunset", "grassheight", "temperature", "wind", "insects", "buzz")])
-# x11()
-
-ggplot(m, aes(min_since_sunset, temperature, col = meadow))+geom_point()+facet_wrap(~date(datetime))
-ggplot(m, aes(min_since_sunset, wind, col = meadow))+geom_point()+facet_wrap(~date(datetime))
-
-## 3.2 remove dates with few points ----
-m$datetime %>% date %>% table
-M <- M[which(as.character(date(M$datetime)) %in% (which(table(date(M$datetime)) > 100) %>% names)),]
-
-
-# What's the high wind point?
-hist(M$wind)
-M[M$wind > 4,]
-
-M %>% summary
-
-
 
 # 4 insect GAM ----
 g1 <- gam(insects~
-            s(yday)+
+            #s(yday)+
             s(min_since_sunset)+
-            s(grassheight)+
-            s(temperature)+
-            s(wind)+
-            # s(buzz)+
-            year+ #, bs = "re")+
+            s(grass)+
+            s(temp)+
+            s(windsp)+
+            #s(buzz)+
+            factor(year)+ #, bs = "re")+
             meadow,# bs = "re"),
-          data = M,
+          data = M_clean,
           family = ziP(),#negbin(theta = 0.62),
           method = "REML")
 
@@ -382,19 +471,21 @@ concurvity(g1, full = FALSE)
 
 thb <- g1$family$getTheta()
 g0 <- gam(insects~
-            s(yday)+
-            s(min_since_sunset)+
-            s(grassheight)+
-            s(temperature)+
-            # s(wind)+
-            s(year, bs = "re")+
-            s(meadow, bs = "re"),
-          data = M,
+            #s(yday)+
+            s(min_since_sunset, k = 5)+
+            s(grass, k = 5)+
+            s(temp, k = 5)+
+            s(windsp, k = 5)+
+            factor(year)+
+            meadow,
+          data = M_clean,
           family=ziP(theta=thb))
 
 g0 %>% summary
 plot(g0, pages = 1, unconditional = TRUE, rug = TRUE, scale = 0)
 gam.check(g0, pages = 1)
+
+AIC(g1, g0)
 
 g2 <- gam(insects~
             s(yday)+
