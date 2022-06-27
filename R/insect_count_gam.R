@@ -27,7 +27,7 @@ df20 <- df20 %>% mutate(.,
                 treatment = Treatment,
                 .keep = "none") %>%
   filter(treatment=="pre" | treatment=="post" | treatment == "mowing")
-df20$treatment %>% unique
+df20$treatment %>% table
 df20$id <- sapply(strsplit(df20$ID, "-"), "[", 2)
 df20$loc <- substr(df20$id, 1, nchar(df20$id)-1)
 paste0(df20$loc, ": ", df20$meadow) %>% unique
@@ -64,6 +64,7 @@ df21 <- df21 %>% mutate(.,
                 treatment,
                 .keep = "none") %>%
   filter(treatment=="pre" | treatment=="post" | treatment == "mowing")
+df21$treatment %>% table
 
 df21$id <- sapply(strsplit(df21$ID, "_"), "[", 2)
 df21$loc <- substr(df21$id, 1, nchar(df21$id)-1)
